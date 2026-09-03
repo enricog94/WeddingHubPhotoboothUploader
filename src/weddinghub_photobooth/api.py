@@ -97,6 +97,10 @@ class WeddingHubApiClient:
             raise RateLimitError(error_msg, retry_after=retry_after)
         if status in (401, 403):
             raise AuthenticationError(error_msg)
+        if status == 410:
+            # Session expired (e.g. upload took longer than TTL or backend cleaned up session).
+            # This is recoverable: the client transitions the item to RETRY so it can start fresh from /init.
+            raise TransientApiError(error_msg)
         if 500 <= status < 600:
             raise TransientApiError(error_msg)
         if 400 <= status < 500:
@@ -166,21 +170,30 @@ class WeddingHubApiClient:
         if not path.is_file():
             raise PermanentApiError(f"Local file does not exist: {path}")
 
-        req_headers = {"Content-Type": "image/jpeg"}
+        file_size = path.stat().st_size
+        req_headers = {
+            "Content-Type": "image/jpeg",
+            "Content-Length": str(file_size),
+        }
         if headers:
             req_headers.update(headers)
 
         try:
             with open(path, "rb") as f:
-                content = f.read()
-
-            resp = self._client.put(
-                upload_url,
-                content=content,
-                headers=req_headers,
-            )
+                resp = self._client.put(
+                    upload_url,
+                    content=f,
+                    headers=req_headers,
+                )
             # Binary upload endpoint may return 200 or 201 or 204
             if not (200 <= resp.status_code < 300):
+                if resp.status_code == 403:
+                    # Presigned URL may have expired or access was denied by storage.
+                    # This must be treated as retriable (not permanent file error) so that
+                    # the uploader retries and requests a fresh presigned URL from /init.
+                    raise TransientApiError(
+                        f"Presigned upload URL expired or rejected (HTTP 403): {resp.text[:200]}"
+                    )
                 if 500 <= resp.status_code < 600:
                     raise TransientApiError(
                         f"Binary upload server error: HTTP {resp.status_code}"

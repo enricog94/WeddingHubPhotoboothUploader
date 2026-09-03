@@ -248,28 +248,31 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="weddinghub-photobooth",
-        description="WeddingHub Photobooth Uploader CLI and background service",
-    )
-    parser.add_argument(
+    config_parent = argparse.ArgumentParser(add_help=False)
+    config_parent.add_argument(
         "-c",
         "--config",
         type=Path,
-        default=None,
+        default=argparse.SUPPRESS,
         help="Path to TOML configuration file",
+    )
+
+    parser = argparse.ArgumentParser(
+        prog="weddinghub-photobooth",
+        description="WeddingHub Photobooth Uploader CLI and background service",
+        parents=[config_parent],
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
 
     # version
-    subparsers.add_parser("version", help="Show uploader version")
+    subparsers.add_parser("version", help="Show uploader version", parents=[config_parent])
 
     # status
-    subparsers.add_parser("status", help="Show service and queue health")
+    subparsers.add_parser("status", help="Show service and queue health", parents=[config_parent])
 
     # queue
-    queue_parser = subparsers.add_parser("queue", help="List queue items")
+    queue_parser = subparsers.add_parser("queue", help="List queue items", parents=[config_parent])
     queue_parser.add_argument(
         "--limit",
         type=int,
@@ -284,13 +287,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     # retry
-    subparsers.add_parser("retry", help="Reset failed/retrying photos for immediate retry")
+    subparsers.add_parser(
+        "retry",
+        help="Reset failed/retrying photos for immediate retry",
+        parents=[config_parent],
+    )
 
     # test
-    subparsers.add_parser("test", help="Verify backend connection and device token")
+    subparsers.add_parser(
+        "test",
+        help="Verify backend connection and device token",
+        parents=[config_parent],
+    )
 
     # run
-    subparsers.add_parser("run", help="Run uploader service in foreground")
+    subparsers.add_parser(
+        "run",
+        help="Run uploader service in foreground",
+        parents=[config_parent],
+    )
 
     return parser
 
@@ -298,6 +313,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+
+    if not hasattr(args, "config"):
+        args.config = None
 
     if not args.command:
         # Default to status if no command given

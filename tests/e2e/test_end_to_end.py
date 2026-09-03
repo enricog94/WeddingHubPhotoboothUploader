@@ -290,3 +290,160 @@ def test_crash_recovery_flow(temp_dir: Path, test_server: WeddingHubReferenceSer
     media_records = test_server.state.get_media_list(wedding["id"])
     assert len(media_records) == 1
     assert media_records[0]["sha256"] == img_sha
+
+
+def test_session_expired_410_end_to_end_recovery(temp_dir: Path, test_server: WeddingHubReferenceServer):
+    """Full lifecycle recovery when /complete returns 410:
+    init -> session expiry -> complete 410 -> RETRY -> nuovo init -> PUT -> complete -> UPLOADED.
+    """
+    wedding = test_server.state.create_wedding(
+        slug="serena-enrico-2027",
+        bride_name="Serena",
+        groom_name="Enrico",
+    )
+    raw_token = "token_session_410_test"
+    test_server.state.register_device(wedding["id"], "Booth Station 410", raw_token)
+
+    photos_dir = temp_dir / "photos_410"
+    photos_dir.mkdir()
+    db_path = temp_dir / "queue_410.db"
+
+    config = Config(
+        api_base_url=test_server.base_url,
+        device_token=raw_token,
+        watch_directory=photos_dir,
+        db_path=db_path,
+    )
+
+    db = Database(db_path)
+    worker = UploadWorker(config=config, db=db)
+
+    # 1. Enqueue photo
+    img_path = photos_dir / "expired_flow_shot.jpg"
+    img_sha = create_valid_jpeg(img_path, b"expired_session_recovery_bytes")
+    db.enqueue(
+        local_path=str(img_path),
+        filename=img_path.name,
+        sha256=img_sha,
+        file_size=img_path.stat().st_size,
+        created_at="2026-09-02T22:45:00Z",
+    )
+
+    api_client = worker._get_api_client()
+    orig_complete = api_client.complete_upload
+    first_attempt = True
+
+    def expire_on_first_complete(upload_id: str, sha256: str):
+        nonlocal first_attempt
+        if first_attempt:
+            first_attempt = False
+            # Backend expires the session right before complete is processed
+            test_server.state.expire_upload_session(upload_id)
+        return orig_complete(upload_id=upload_id, sha256=sha256)
+
+    api_client.complete_upload = expire_on_first_complete  # type: ignore[assignment]
+    worker._custom_api_client = api_client
+
+    # 2. First attempt: completes with 410 and enters RETRY
+    processed_1 = worker.process_queue_once()
+    assert processed_1 == 1
+
+    items_after_1 = db.list_queue(limit=10)
+    assert len(items_after_1) == 1
+    assert items_after_1[0].status == QueueStatus.RETRY
+    assert "410" in items_after_1[0].last_error
+
+    # 3. Ready for retry: reset backoff timer
+    db.reset_retry_queue()
+
+    # 4. Second attempt: fresh init -> PUT -> complete -> UPLOADED
+    processed_2 = worker.process_queue_once()
+    assert processed_2 == 1
+
+    items_after_2 = db.list_queue(limit=10)
+    assert len(items_after_2) == 1
+    assert items_after_2[0].status == QueueStatus.UPLOADED
+    assert items_after_2[0].remote_media_id is not None
+
+    # WeddingHub has exactly 1 media record
+    media_records = test_server.state.get_media_list(wedding["id"])
+    assert len(media_records) == 1
+    assert media_records[0]["sha256"] == img_sha
+
+
+def test_presigned_r2_403_end_to_end_recovery(temp_dir: Path, test_server: WeddingHubReferenceServer):
+    """Full lifecycle recovery when presigned PUT returns 403:
+    init -> presigned 403 -> RETRY -> nuovo init -> PUT -> complete -> UPLOADED.
+    """
+    wedding = test_server.state.create_wedding(
+        slug="serena-enrico-2027",
+        bride_name="Serena",
+        groom_name="Enrico",
+    )
+    raw_token = "token_presigned_403_test"
+    test_server.state.register_device(wedding["id"], "Booth Station 403", raw_token)
+
+    photos_dir = temp_dir / "photos_403"
+    photos_dir.mkdir()
+    db_path = temp_dir / "queue_403.db"
+
+    config = Config(
+        api_base_url=test_server.base_url,
+        device_token=raw_token,
+        watch_directory=photos_dir,
+        db_path=db_path,
+    )
+
+    db = Database(db_path)
+    worker = UploadWorker(config=config, db=db)
+
+    # 1. Enqueue photo
+    img_path = photos_dir / "presigned_403_shot.jpg"
+    img_sha = create_valid_jpeg(img_path, b"presigned_403_recovery_bytes")
+    db.enqueue(
+        local_path=str(img_path),
+        filename=img_path.name,
+        sha256=img_sha,
+        file_size=img_path.stat().st_size,
+        created_at="2026-09-02T22:50:00Z",
+    )
+
+    api_client = worker._get_api_client()
+    orig_init = api_client.init_upload
+    first_attempt = True
+
+    def fail_storage_on_first_init(*args, **kwargs):
+        resp = orig_init(*args, **kwargs)
+        nonlocal first_attempt
+        if first_attempt:
+            first_attempt = False
+            # Force reference storage server to return 403 on this specific upload_id
+            test_server.state.storage_status_overrides[resp.upload_id] = 403
+        return resp
+
+    api_client.init_upload = fail_storage_on_first_init  # type: ignore[assignment]
+    worker._custom_api_client = api_client
+
+    # 2. First attempt: presigned PUT fails with 403 -> item transitions to RETRY (not FAILED)
+    processed_1 = worker.process_queue_once()
+    assert processed_1 == 1
+
+    items_after_1 = db.list_queue(limit=10)
+    assert len(items_after_1) == 1
+    assert items_after_1[0].status == QueueStatus.RETRY
+    assert "403" in items_after_1[0].last_error
+
+    # 3. Ready for retry: reset backoff timer
+    db.reset_retry_queue()
+
+    # 4. Second attempt: fresh /init -> PUT succeeds -> complete -> UPLOADED
+    processed_2 = worker.process_queue_once()
+    assert processed_2 == 1
+
+    items_after_2 = db.list_queue(limit=10)
+    assert len(items_after_2) == 1
+    assert items_after_2[0].status == QueueStatus.UPLOADED
+
+    media_records = test_server.state.get_media_list(wedding["id"])
+    assert len(media_records) == 1
+    assert media_records[0]["sha256"] == img_sha

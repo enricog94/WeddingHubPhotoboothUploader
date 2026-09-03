@@ -1,8 +1,11 @@
 # WeddingHub Photobooth Uploader Configuration
 # Copy this file to /etc/weddinghub-photobooth/config.toml or pass via -c / path / WEDDINGHUB_CONFIG_PATH
 
-# Base URL of the WeddingHub instance (TLS required in production)
+# Base URL of the WeddingHub instance (HTTPS required for remote hosts; HTTP allowed for localhost/127.0.0.1)
 api_base_url = "https://wedding.eshome.it"
+
+# Allow unencrypted HTTP for remote hosts (DANGEROUS: use only for local staging/development)
+# allow_insecure_http = false
 
 # Secret revocable device token assigned to this photobooth unit
 # NEVER commit a real token to version control!

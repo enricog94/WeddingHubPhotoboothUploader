@@ -10,7 +10,7 @@ User=photobooth
 Group=photobooth
 
 # Execute the uploader daemon
-ExecStart=/usr/local/bin/weddinghub-photobooth run -c /etc/weddinghub-photobooth/config.toml
+ExecStart=/opt/weddinghub-photobooth/venv/bin/weddinghub-photobooth -c /etc/weddinghub-photobooth/config.toml run
 
 # Restart policy for resilience
 Restart=on-failure

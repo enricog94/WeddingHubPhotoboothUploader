@@ -69,7 +69,56 @@ def test_invalid_api_url(temp_dir: Path):
 
     with pytest.raises(ConfigError) as exc_info:
         load_config(config_file)
-    assert "Must start with http:// or https://" in str(exc_info.value)
+    assert "Must be a valid URL starting with http:// or https://" in str(exc_info.value)
+
+
+def test_remote_plain_http_rejected(temp_dir: Path):
+    config_file = temp_dir / "remote_http.toml"
+    config_file.write_text(
+        """
+        api_base_url = "http://wedding.eshome.it"
+        device_token = "token123"
+        watch_directory = "/tmp/photos"
+        db_path = "/tmp/queue.db"
+        """,
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_file)
+    assert "Insecure plain HTTP is not permitted for remote host" in str(exc_info.value)
+
+
+def test_remote_plain_http_allowed_with_flag(temp_dir: Path):
+    config_file = temp_dir / "remote_http_allowed.toml"
+    config_file.write_text(
+        """
+        api_base_url = "http://wedding.eshome.it"
+        device_token = "token123"
+        watch_directory = "/tmp/photos"
+        db_path = "/tmp/queue.db"
+        allow_insecure_http = true
+        """,
+        encoding="utf-8",
+    )
+    cfg = load_config(config_file)
+    assert cfg.allow_insecure_http is True
+    assert cfg.api_base_url == "http://wedding.eshome.it"
+
+
+def test_localhost_plain_http_allowed(temp_dir: Path):
+    config_file = temp_dir / "local_http.toml"
+    config_file.write_text(
+        """
+        api_base_url = "http://127.0.0.1:8080"
+        device_token = "token123"
+        watch_directory = "/tmp/photos"
+        db_path = "/tmp/queue.db"
+        """,
+        encoding="utf-8",
+    )
+    cfg = load_config(config_file)
+    assert cfg.allow_insecure_http is False
+    assert cfg.api_base_url == "http://127.0.0.1:8080"
 
 
 def test_device_token_masking():

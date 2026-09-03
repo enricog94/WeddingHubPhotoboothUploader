@@ -220,3 +220,46 @@ def test_cli_test_disabled_device(temp_dir: Path, capsys: pytest.CaptureFixture,
     assert "Device is registered but currently disabled" in captured.err
 
 
+@pytest.mark.parametrize(
+    "subcmd",
+    ["run", "status", "test", "queue", "retry", "version"],
+)
+def test_cli_parsing_canonical_syntax(subcmd: str):
+    """Canonical syntax: weddinghub-photobooth -c /path/to/config.toml <subcmd>."""
+    parser = build_parser()
+    expected_path = Path("/etc/weddinghub-photobooth/config.toml")
+    args = parser.parse_args(["-c", str(expected_path), subcmd])
+    assert args.command == subcmd
+    assert args.config == expected_path
+
+
+@pytest.mark.parametrize(
+    "subcmd",
+    ["run", "status", "test", "queue", "retry", "version"],
+)
+def test_cli_parsing_ergonomic_syntax(subcmd: str):
+    """Ergonomic syntax: weddinghub-photobooth <subcmd> -c /path/to/config.toml."""
+    parser = build_parser()
+    expected_path = Path("/etc/weddinghub-photobooth/config.toml")
+    args = parser.parse_args([subcmd, "-c", str(expected_path)])
+    assert args.command == subcmd
+    assert args.config == expected_path
+
+
+def test_cli_parsing_no_config_specified():
+    """Omitting -c leaves config unset or None."""
+    parser = build_parser()
+    args = parser.parse_args(["run"])
+    assert args.command == "run"
+    assert getattr(args, "config", None) is None
+
+
+def test_cli_parsing_root_only_config():
+    """Providing only -c config.toml without subcommand."""
+    parser = build_parser()
+    expected_path = Path("./config.toml")
+    args = parser.parse_args(["-c", str(expected_path)])
+    assert args.command is None
+    assert args.config == expected_path
+
+

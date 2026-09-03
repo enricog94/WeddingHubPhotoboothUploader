@@ -32,6 +32,7 @@ class Config:
     scan_interval: float = 10.0
     log_level: str = "INFO"
     log_file: Path | None = None
+    allow_insecure_http: bool = False
 
     def masked_device_token(self) -> str:
         """Return a safe masked token for logging or status displays."""
@@ -59,6 +60,7 @@ class Config:
             "scan_interval": self.scan_interval,
             "log_level": self.log_level,
             "log_file": str(self.log_file) if self.log_file else None,
+            "allow_insecure_http": self.allow_insecure_http,
         }
 
 
@@ -105,11 +107,26 @@ def load_config(config_path: str | Path | None = None) -> Config:
             f"Configuration file {resolved_path} is missing required fields: {', '.join(missing)}"
         )
 
+    import urllib.parse
+
     api_base_url = str(data["api_base_url"]).rstrip("/")
-    if not api_base_url.startswith(("http://", "https://")):
+    parsed_url = urllib.parse.urlparse(api_base_url)
+    if parsed_url.scheme not in ("http", "https") or not parsed_url.netloc:
         raise ConfigError(
-            f"Invalid api_base_url '{api_base_url}'. Must start with http:// or https://"
+            f"Invalid api_base_url '{api_base_url}'. Must be a valid URL starting with http:// or https://"
         )
+
+    allow_insecure_http = bool(data.get("allow_insecure_http", False))
+
+    if parsed_url.scheme == "http":
+        hostname = (parsed_url.hostname or "").lower()
+        local_hosts = {"localhost", "127.0.0.1", "::1", "testserver"}
+        if hostname not in local_hosts and not allow_insecure_http:
+            raise ConfigError(
+                f"Insecure plain HTTP is not permitted for remote host '{hostname}'. "
+                "HTTPS is required in production to protect the device Bearer token. "
+                "For local testing/development, use localhost/127.0.0.1 or explicitly set allow_insecure_http = true in config.toml."
+            )
 
     watch_directory = Path(data["watch_directory"])
     db_path = Path(data["db_path"])
@@ -132,4 +149,5 @@ def load_config(config_path: str | Path | None = None) -> Config:
         scan_interval=float(data.get("scan_interval", 10.0)),
         log_level=str(data.get("log_level", "INFO")).upper(),
         log_file=log_file,
+        allow_insecure_http=allow_insecure_http,
     )

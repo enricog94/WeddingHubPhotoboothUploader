@@ -48,9 +48,27 @@ else
     echo "[OK] Existing configuration file found at $CONFIG_FILE."
 fi
 
-# 4. Install Python package
-echo "[INFO] Installing Python package..."
-python3 -m pip install "$REPO_DIR"
+# 4. Install Python package in dedicated virtual environment (PEP 668 compliant)
+APP_DIR="/opt/weddinghub-photobooth"
+VENV_DIR="$APP_DIR/venv"
+
+echo "[INFO] Setting up virtual environment at $VENV_DIR..."
+mkdir -p "$APP_DIR"
+if [[ ! -d "$VENV_DIR" ]]; then
+    echo "[INFO] Creating dedicated Python virtual environment..."
+    python3 -m venv "$VENV_DIR"
+else
+    echo "[OK] Existing virtual environment found at $VENV_DIR."
+fi
+
+echo "[INFO] Installing/updating package in dedicated virtual environment..."
+"$VENV_DIR/bin/pip" install --upgrade pip
+"$VENV_DIR/bin/pip" install "$REPO_DIR"
+
+# Symlink executable to /usr/local/bin for interactive CLI usage
+mkdir -p /usr/local/bin
+ln -sf "$VENV_DIR/bin/weddinghub-photobooth" /usr/local/bin/weddinghub-photobooth
+echo "[OK] CLI symlinked to /usr/local/bin/weddinghub-photobooth."
 
 # 5. Install systemd service
 SERVICE_SRC="$REPO_DIR/systemd/weddinghub-photobooth-uploader.service"
@@ -67,6 +85,7 @@ echo ""
 echo "=== Installation Finished Successfully ==="
 echo "Next steps:"
 echo "1. Edit configuration: sudo nano $CONFIG_FILE"
-echo "2. Test configuration: weddinghub-photobooth status -c $CONFIG_FILE"
-echo "3. Enable and start:   sudo systemctl enable --now weddinghub-photobooth-uploader.service"
-echo "4. Monitor logs:       journalctl -u weddinghub-photobooth-uploader.service -f"
+echo "2. Test connectivity:  weddinghub-photobooth -c $CONFIG_FILE test"
+echo "3. Check queue status: weddinghub-photobooth -c $CONFIG_FILE status"
+echo "4. Enable and start:   sudo systemctl enable --now weddinghub-photobooth-uploader.service"
+echo "5. Monitor logs:       journalctl -u weddinghub-photobooth-uploader.service -f"

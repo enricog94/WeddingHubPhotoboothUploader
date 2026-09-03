@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Generator
+from pathlib import Path
 
 import httpx
 import pytest
@@ -542,3 +543,90 @@ def test_device_disabled_after_init_rejected(server: WeddingHubReferenceServer, 
         headers=headers,
     )
     assert comp_res.status_code == 403
+
+
+def test_presigned_storage_403_raises_transient_error(
+    server: WeddingHubReferenceServer, device: dict, device_token: str, tmp_path: Path
+):
+    """Storage 403 on presigned PUT is treated as TransientApiError (retriable via new /init)."""
+    from weddinghub_photobooth.api import TransientApiError, WeddingHubApiClient
+
+    sample_file = tmp_path / "photo.jpg"
+    sample_content = b"\xff\xd8" + b"imgdata" * 50 + b"\xff\xd9"
+    sample_file.write_bytes(sample_content)
+    sample_sha = hashlib.sha256(sample_content).hexdigest()
+
+    client = WeddingHubApiClient(api_base_url=server.base_url, device_token=device_token)
+    try:
+        init_res = client.init_upload("photo.jpg", sample_sha, len(sample_content))
+        assert init_res.status == "upload_required"
+
+        # Force reference storage to return 403 on this upload PUT
+        server.state.storage_status_overrides[init_res.upload_id] = 403
+
+        with pytest.raises(TransientApiError) as exc_info:
+            client.upload_binary(init_res.upload_url, sample_file)
+
+        assert "HTTP 403" in str(exc_info.value)
+    finally:
+        client.close()
+
+
+def test_complete_410_session_expired_raises_transient_error(
+    server: WeddingHubReferenceServer, device: dict, device_token: str, tmp_path: Path
+):
+    """Backend returning 410 Gone on /complete is treated as TransientApiError (retriable via fresh /init)."""
+    from weddinghub_photobooth.api import TransientApiError, WeddingHubApiClient
+
+    sample_file = tmp_path / "expired_session.jpg"
+    sample_content = b"\xff\xd8" + b"expdata" * 50 + b"\xff\xd9"
+    sample_file.write_bytes(sample_content)
+    sample_sha = hashlib.sha256(sample_content).hexdigest()
+
+    client = WeddingHubApiClient(api_base_url=server.base_url, device_token=device_token)
+    try:
+        init_res = client.init_upload("expired_session.jpg", sample_sha, len(sample_content))
+        assert init_res.status == "upload_required"
+
+        # Stream binary successfully
+        client.upload_binary(init_res.upload_url, sample_file)
+
+        # Expire session on backend
+        server.state.expire_upload_session(init_res.upload_id)
+
+        with pytest.raises(TransientApiError) as exc_info:
+            client.complete_upload(init_res.upload_id, sample_sha)
+
+        assert "410" in str(exc_info.value)
+    finally:
+        client.close()
+
+
+def test_streaming_upload_binary(
+    server: WeddingHubReferenceServer, device: dict, device_token: str, tmp_path: Path
+):
+    """upload_binary streams the file object with Content-Length without reading entirely into memory."""
+    from weddinghub_photobooth.api import WeddingHubApiClient
+
+    large_file = tmp_path / "streamed.jpg"
+    # Create a 256KB sample file
+    large_content = b"\xff\xd8" + b"stream_test_chunk_" * 14000 + b"\xff\xd9"
+    large_file.write_bytes(large_content)
+    file_sha = hashlib.sha256(large_content).hexdigest()
+
+    client = WeddingHubApiClient(api_base_url=server.base_url, device_token=device_token)
+    try:
+        init_res = client.init_upload("streamed.jpg", file_sha, len(large_content))
+        assert init_res.status == "upload_required"
+
+        client.upload_binary(init_res.upload_url, large_file)
+
+        comp_res = client.complete_upload(init_res.upload_id, file_sha)
+        assert comp_res.status == "completed"
+
+        # Verify exact bytes stored
+        session = server.state.upload_sessions[init_res.upload_id]
+        stored_bytes = server.state.storage_objects[session["storage_key"]]
+        assert stored_bytes == large_content
+    finally:
+        client.close()

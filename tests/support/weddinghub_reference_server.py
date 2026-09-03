@@ -30,6 +30,7 @@ class WeddingHubServerState:
         self.upload_sessions: dict[str, dict[str, Any]] = {}
         self.media_records: dict[int, dict[str, Any]] = {}
         self.storage_objects: dict[str, bytes] = {}
+        self.storage_status_overrides: dict[str, int] = {}
         self.is_offline: bool = False
         self._lock = threading.Lock()
 
@@ -411,6 +412,24 @@ class ReferenceServerHandler(BaseHTTPRequestHandler):
         session = self.server.state.upload_sessions.get(upload_id)
         if not session:
             self.send_response(404)
+            self.end_headers()
+            return
+
+        if upload_id in self.server.state.storage_status_overrides:
+            override_status = self.server.state.storage_status_overrides.pop(upload_id)
+            content_length = int(self.headers.get("Content-Length", 0))
+            if content_length > 0:
+                self.rfile.read(content_length)
+            self.send_response(override_status)
+            self.end_headers()
+            return
+
+        expires_at = datetime.fromisoformat(session["expires_at"])
+        if session["status"] == "expired" or datetime.now(UTC) > expires_at:
+            content_length = int(self.headers.get("Content-Length", 0))
+            if content_length > 0:
+                self.rfile.read(content_length)
+            self.send_response(403)
             self.end_headers()
             return
 

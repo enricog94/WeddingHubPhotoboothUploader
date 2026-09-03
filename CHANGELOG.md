@@ -18,11 +18,21 @@ The project follows Semantic Versioning and a Keep-a-Changelog-style structure.
   - `BACKEND_INTEGRATION.md`: Complete API specification, OpenAPI schema, and deployment guide for WeddingHub.
   - `ARCHITECTURE.md`: Detailed architecture design, threading model, crash recovery, and multi-tenant security.
 
+### Changed
+
+- **CLI / Systemd Syntax**: Standardized CLI invocation to canonical `weddinghub-photobooth -c /etc/weddinghub-photobooth/config.toml <command>`, using parent argument parsing to seamlessly support `-c` before or after subcommands.
+- **Presigned R2 403 Retry**: HTTP 403 on storage presigned PUT is treated as a transient/retriable expiration error (`TransientApiError`), triggering a fresh `/init` session rather than a permanent failure.
+- **Session Expiry 410 Recovery**: HTTP 410 Gone on `/complete` is classified as retriable (`TransientApiError`), allowing the client to transition the item to `RETRY` and re-initiate the upload with a new session.
+- **Streaming PUT Uploads**: Modified `upload_binary()` to stream binary files directly via file object with `Content-Length` header, eliminating `f.read()` memory consumption.
+- **PEP 668 Compliant Linux Installer**: Refactored `scripts/install.sh` to install inside a dedicated virtual environment at `/opt/weddinghub-photobooth/venv`, updating systemd `ExecStart` and creating symlink in `/usr/local/bin`.
+- **Installer Idempotency**: Existing `config.toml` and SQLite queue databases are strictly preserved across reinstalls and upgrades.
+
 ### Security
 
 - Enforced server-side token hashing using SHA-256 for all device tokens.
 - Strict multi-tenant isolation ensuring devices cannot write, read, or complete uploads for weddings other than their own.
 - Remote device revocation kill-switch (`enabled = 0`).
+- Enforced HTTPS for remote endpoints to protect device Bearer tokens from unencrypted exposure, restricting plain HTTP strictly to local test addresses (`localhost`, `127.0.0.1`, `::1`) or explicit dev override.
 
 ## [0.1.0] - 2026-09-02
 

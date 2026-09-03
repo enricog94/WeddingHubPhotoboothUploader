@@ -33,23 +33,28 @@ sudo ./scripts/install.sh
 ```
 
 This will:
-- Create `/etc/weddinghub-photobooth` and install default `config.toml` (if not existing).
-- Create `/var/lib/weddinghub-photobooth` for the SQLite database.
+- Create `/etc/weddinghub-photobooth` and install default `config.toml` (if not existing, preserving existing configurations on upgrade).
+- Create dedicated virtual environment under `/opt/weddinghub-photobooth/venv` (fully compliant with PEP 668 on Debian 12+ and Ubuntu 24.04+).
+- Create `/var/lib/weddinghub-photobooth` for the SQLite queue database.
+- Install global symlink `/usr/local/bin/weddinghub-photobooth`.
 - Install the systemd service `/etc/systemd/system/weddinghub-photobooth-uploader.service`.
 - Reload `systemd`.
 
 ### 2. Manual Installation
 
-1. Install the package into the system Python or a dedicated virtualenv:
+1. Create a dedicated virtualenv and install the package:
    ```bash
-   pip install .
+   sudo mkdir -p /opt/weddinghub-photobooth
+   sudo python3 -m venv /opt/weddinghub-photobooth/venv
+   sudo /opt/weddinghub-photobooth/venv/bin/pip install .
+   sudo ln -sf /opt/weddinghub-photobooth/venv/bin/weddinghub-photobooth /usr/local/bin/weddinghub-photobooth
    ```
 2. Copy configuration:
    ```bash
    sudo mkdir -p /etc/weddinghub-photobooth /var/lib/weddinghub-photobooth
    sudo cp config.example.toml /etc/weddinghub-photobooth/config.toml
    sudo chown -R photobooth:photobooth /var/lib/weddinghub-photobooth
-   sudo chmod 600 /etc/weddinghub-photobooth/config.toml
+   sudo chmod 640 /etc/weddinghub-photobooth/config.toml
    ```
 3. Edit `/etc/weddinghub-photobooth/config.toml` with your device token and photo directory:
    ```toml
@@ -69,29 +74,34 @@ This will:
 
 ## CLI Usage
 
-The `weddinghub-photobooth` CLI provides inspection and management tools:
+The `weddinghub-photobooth` CLI provides inspection and management tools. The canonical command structure accepts `-c / --config` before the subcommand:
 
 ### Health & Status
 ```bash
-weddinghub-photobooth status
+weddinghub-photobooth -c /etc/weddinghub-photobooth/config.toml status
 ```
 Outputs service configuration (with device token safely masked), total queued, uploading, retrying, uploaded, and failed counts, plus the last upload timestamp and last error.
 
 ### Test Connectivity & Credentials
 ```bash
-weddinghub-photobooth test
+weddinghub-photobooth -c /etc/weddinghub-photobooth/config.toml test
 ```
 Tests connectivity with the WeddingHub backend and verifies that `device_token` is valid and authorized, displaying the device ID, name, enabled status, and associated wedding slug.
 
+### Run Foreground Daemon
+```bash
+weddinghub-photobooth -c /etc/weddinghub-photobooth/config.toml run
+```
+
 ### Inspect Queue
 ```bash
-weddinghub-photobooth queue
-weddinghub-photobooth queue --limit 20 --status RETRY
+weddinghub-photobooth -c /etc/weddinghub-photobooth/config.toml queue
+weddinghub-photobooth -c /etc/weddinghub-photobooth/config.toml queue --limit 20 --status RETRY
 ```
 
 ### Force Immediate Retry
 ```bash
-weddinghub-photobooth retry
+weddinghub-photobooth -c /etc/weddinghub-photobooth/config.toml retry
 ```
 Resets all photos currently in `RETRY` or `FAILED` state back to `PENDING` so the worker processes them immediately.
 
