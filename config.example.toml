@@ -1,0 +1,41 @@
+# WeddingHub Photobooth Uploader Configuration
+# Copy this file to /etc/weddinghub-photobooth/config.toml or pass via -c / path / WEDDINGHUB_CONFIG_PATH
+
+# Base URL of the WeddingHub instance (TLS required in production)
+api_base_url = "https://wedding.eshome.it"
+
+# Secret revocable device token assigned to this photobooth unit
+# NEVER commit a real token to version control!
+device_token = "REPLACE_WITH_DEVICE_TOKEN"
+
+# Local directory where PhotoboothProject outputs completed photos
+watch_directory = "/var/lib/photobooth/photos"
+
+# Path to the persistent SQLite queue database
+db_path = "/var/lib/weddinghub-photobooth/queue.db"
+
+# Seconds to wait for size and mtime stability before hashing and enqueueing a photo
+stability_delay = 2.0
+
+# HTTP request timeout in seconds
+upload_timeout = 30.0
+
+# Maximum number of upload attempts before marking a photo as FAILED (0 for unlimited retries)
+max_retries = 0
+
+# Exponential backoff parameters for transient errors (connection drops, 5xx, rate limits)
+retry_initial_delay = 30.0
+retry_max_delay = 3600.0
+retry_jitter_factor = 0.1
+
+# Minimum delay in seconds before retrying after a 401/403 auth error (to avoid hammering backend)
+auth_error_retry_delay = 300.0
+
+# Polling interval in seconds for fallback directory scans
+scan_interval = 10.0
+
+# Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+log_level = "INFO"
+
+# Optional log file path. If omitted or empty, logs are written to stdout/stderr (ideal for systemd journal)
+# log_file = "/var/log/weddinghub-photobooth/uploader.log"

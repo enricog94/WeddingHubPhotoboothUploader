@@ -1,0 +1,42 @@
+[Unit]
+Description=WeddingHub Photobooth Uploader Service
+Documentation=https://github.com/WeddingHub/PhotoboothUploader
+After=network-online.target local-fs.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=photobooth
+Group=photobooth
+
+# Execute the uploader daemon
+ExecStart=/usr/local/bin/weddinghub-photobooth run -c /etc/weddinghub-photobooth/config.toml
+
+# Restart policy for resilience
+Restart=on-failure
+RestartSec=5s
+
+# Process management
+KillMode=mixed
+TimeoutStopSec=15s
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictRealtime=true
+
+# Filesystem access: read-write for queue DB, read-only for photos and config
+ReadWritePaths=/var/lib/weddinghub-photobooth
+ReadOnlyPaths=/etc/weddinghub-photobooth /var/lib/photobooth/photos
+
+# Logging to systemd journal
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=weddinghub-photobooth
+
+[Install]
+WantedBy=multi-user.target
