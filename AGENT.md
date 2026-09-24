@@ -1,5 +1,24 @@
 # WeddingHub Photobooth Uploader — AGENT.md
 
+## Repository source of truth
+
+Before changing uploader behavior, read in this order:
+
+1. `docs/README.md` — documentation authority and legacy/superseded material;
+2. `docs/EVENTHUB_INTEGRATION.md` — authoritative EventHub client/server contract;
+3. `docs/FINAL_HARDENING_REVIEW.md` — bounded reliability work required before field test;
+4. `ARCHITECTURE.md`, `CHANGELOG.md`, and `VERSION` for current implementation state.
+
+Do not use chat history as the source of truth when these repository documents exist.
+The historical root `BACKEND_INTEGRATION.md` is superseded for new EventHub work and must
+not be copied into new V2 backend code.
+
+The active backend domain is Event-first. New integration behavior must not require the
+Linux client to choose or store an `event_id`; the device token resolves Event ownership
+server-side.
+
+---
+
 ## Project identity
 
 Project: `WeddingHub Photobooth Uploader`
