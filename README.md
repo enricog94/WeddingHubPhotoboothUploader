@@ -175,7 +175,10 @@ Structured lifecycle events:
 
 ## Documentation & Backend Integration
 
-- **[ARCHITECTURE.md](file:///c:/Enrico/SviluppoSW/PhotoboothUploader/ARCHITECTURE.md)**: Deep dive into component design, threading, state transitions, crash recovery, and security.
-- **[BACKEND_INTEGRATION.md](file:///c:/Enrico/SviluppoSW/PhotoboothUploader/BACKEND_INTEGRATION.md)**: Complete API contract, OpenAPI specification, database schema, and integration guide for WeddingHub.
+- **[docs/README.md](docs/README.md)**: Documentation authority and source-of-truth order.
+- **[docs/EVENTHUB_INTEGRATION.md](docs/EVENTHUB_INTEGRATION.md)**: Authoritative EventHub integration contract.
+- **[docs/FINAL_HARDENING_REVIEW.md](docs/FINAL_HARDENING_REVIEW.md)**: Final reliability work required before the real Linux field test.
+- **[ARCHITECTURE.md](ARCHITECTURE.md)**: Current uploader architecture, threading, state transitions, crash recovery, and security.
+- **[BACKEND_INTEGRATION.md](BACKEND_INTEGRATION.md)**: Legacy WeddingHub-specific backend contract retained for history; superseded for new EventHub work.
 
 
