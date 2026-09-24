@@ -21,12 +21,16 @@ Required work:
 - consume the Event-first `/api/photobooth/verify` contract;
 - isolate any temporary legacy `wedding` compatibility in one tested adapter;
 - make CLI verification strict and display Event semantics;
-- persist local path/size/`mtime_ns` observation metadata so unchanged known JPEGs are
+- persist local path/size/`mtime_ns` observation metadata in a dedicated path-oriented
+  `file_observations` table inside the existing SQLite DB, so unchanged known JPEGs are
   skipped before stability checking and hashing, including after daemon restart;
+- keep `upload_queue` content-oriented/unique by SHA and ensure multiple different paths
+  containing identical bytes can each have their own persisted observation;
 - migrate existing 0.1.0 SQLite databases additively with no queue loss;
 - replace unbounded thread-per-candidate stability checks with a small bounded worker pool;
-- re-check queued file size and SHA immediately before upload and safely rediscover changed
-  content instead of uploading under stale metadata;
+- re-check queued file size and SHA immediately before upload; on mismatch do not call
+  init/PUT, mark the stale queue item explicitly, clear only that path observation, and
+  let normal discovery enqueue the current bytes under their real SHA;
 - add Python >=3.11 / venv installer preflight without installing OS packages;
 - require a real TOML boolean for `allow_insecure_http`;
 - support numeric and HTTP-date `Retry-After`;

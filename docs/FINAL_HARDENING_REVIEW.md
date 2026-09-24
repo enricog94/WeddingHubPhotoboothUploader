@@ -66,15 +66,44 @@ pre-filter; SHA remains the content identity.
 
 ### Implementation direction
 
-Prefer evolving the existing SQLite schema rather than adding a second state store.
-SQLite schema evolution must be safe for an existing `queue.db` created by 0.1.0.
+Keep all persistence inside the existing SQLite `queue.db`, but **do not store path
+observation state on `upload_queue` itself**.
 
-Do not drop/recreate the queue table.
+`upload_queue` is content-oriented and enforces one row per SHA-256. Two different local
+paths can legitimately contain identical bytes and therefore collapse to the same queue
+row. If path/size/mtime observation metadata lives on that row, only one of those paths
+can be represented correctly and the other path can be re-hashed forever.
 
-A practical approach is additive columns plus a schema-migration helper that checks
-`PRAGMA table_info(upload_queue)` and adds missing columns.
+Use a dedicated additive table in the same database, conceptually:
 
-The exact design may differ if it stays simple and deterministic.
+```sql
+CREATE TABLE IF NOT EXISTS file_observations (
+    local_path TEXT PRIMARY KEY,
+    observed_size INTEGER NOT NULL,
+    observed_mtime_ns INTEGER NOT NULL,
+    sha256 TEXT NOT NULL,
+    observed_at TEXT NOT NULL
+);
+```
+
+The exact column names may differ, but the ownership must remain path-oriented.
+
+Required behavior:
+
+- query `file_observations` by canonical/resolved `local_path`;
+- same size + same `mtime_ns` => skip immediately;
+- changed size or `mtime_ns` => perform normal stability/JPEG/SHA processing;
+- after a stable file has been hashed/enqueued (including a duplicate SHA already present
+  in `upload_queue`), upsert that path's observation row;
+- clearing one path observation must not mutate or invalidate the content queue row or
+  observations for other paths.
+
+This is an additive SQLite schema migration: existing `upload_queue` data and state stay
+untouched. A pre-hardening 0.1.0 database may perform one normal re-evaluation of existing
+files after upgrade to populate `file_observations`; subsequent scans and restarts must
+use the fast path.
+
+Do not drop/recreate `upload_queue`.
 
 ### Required tests
 
@@ -185,10 +214,14 @@ Immediately before calling `init_upload`/PUT:
 
 Do not upload changed bytes under the old fingerprint.
 
-Changed content must not be lost. The changed path should return to the discovery path so
-that the current stable content can be queued under its real SHA.
+Changed content must not be lost. On a mismatch, mark the stale queue item with an
+explicit terminal error such as `LOCAL_FILE_CHANGED`, delete only that path's observation
+row, and do not call init/PUT. The periodic scanner/watchdog can then rediscover the
+current bytes and enqueue them under their real SHA. If those bytes already exist by SHA,
+normal queue deduplication applies and the path observation must still be recorded.
 
-Avoid endless loops when software repeatedly mutates the same file.
+Avoid direct coupling from UploadWorker back into PhotoWatcher and avoid endless loops when
+software repeatedly mutates the same file.
 
 ### Required tests
 
