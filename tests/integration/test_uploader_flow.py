@@ -9,6 +9,7 @@ from typing import Any, ClassVar
 from weddinghub_photobooth.api import WeddingHubApiClient
 from weddinghub_photobooth.config import Config
 from weddinghub_photobooth.db import Database
+from weddinghub_photobooth.hashing import calculate_sha256
 from weddinghub_photobooth.models import QueueStatus
 from weddinghub_photobooth.uploader import UploadWorker
 
@@ -160,11 +161,12 @@ def test_full_successful_upload_flow(
         original_mtime = photo_path.stat().st_mtime
 
         # Enqueue item
+        real_sha = calculate_sha256(photo_path)
         item, _ = db.enqueue(
             local_path=str(photo_path),
             filename=photo_path.name,
-            sha256="sha256-test-photo",
-            file_size=len(sample_jpeg_bytes),
+            sha256=real_sha,
+            file_size=len(original_bytes),
             created_at="2026-09-02T20:00:00Z",
         )
 
@@ -218,8 +220,8 @@ def test_idempotent_already_exists_flow(
         item, _ = db.enqueue(
             local_path=str(photo_path),
             filename=photo_path.name,
-            sha256="sha256-existing-photo",
-            file_size=100,
+            sha256=calculate_sha256(photo_path),
+            file_size=photo_path.stat().st_size,
             created_at="2026-09-02T20:00:00Z",
         )
 
@@ -258,8 +260,8 @@ def test_http_500_retry_behavior(
         item, _ = db.enqueue(
             local_path=str(photo_path),
             filename=photo_path.name,
-            sha256="sha256-500",
-            file_size=100,
+            sha256=calculate_sha256(photo_path),
+            file_size=photo_path.stat().st_size,
             created_at="2026-09-02T20:00:00Z",
         )
 
@@ -301,8 +303,8 @@ def test_http_429_retry_after(
         item, _ = db.enqueue(
             local_path=str(photo_path),
             filename=photo_path.name,
-            sha256="sha256-429",
-            file_size=100,
+            sha256=calculate_sha256(photo_path),
+            file_size=photo_path.stat().st_size,
             created_at="2026-09-02T20:00:00Z",
         )
 
@@ -340,8 +342,8 @@ def test_http_401_auth_error_handling(
         item, _ = db.enqueue(
             local_path=str(photo_path),
             filename=photo_path.name,
-            sha256="sha256-401",
-            file_size=100,
+            sha256=calculate_sha256(photo_path),
+            file_size=photo_path.stat().st_size,
             created_at="2026-09-02T20:00:00Z",
         )
 
@@ -381,8 +383,8 @@ def test_permanent_400_marks_failed(
         item, _ = db.enqueue(
             local_path=str(photo_path),
             filename=photo_path.name,
-            sha256="sha256-400",
-            file_size=100,
+            sha256=calculate_sha256(photo_path),
+            file_size=photo_path.stat().st_size,
             created_at="2026-09-02T20:00:00Z",
         )
 
@@ -418,8 +420,8 @@ def test_network_timeout_retry(
     item, _ = db.enqueue(
         local_path=str(photo_path),
         filename=photo_path.name,
-        sha256="sha256-timeout",
-        file_size=100,
+        sha256=calculate_sha256(photo_path),
+        file_size=photo_path.stat().st_size,
         created_at="2026-09-02T20:00:00Z",
     )
 

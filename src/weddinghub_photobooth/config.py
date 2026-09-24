@@ -116,7 +116,10 @@ def load_config(config_path: str | Path | None = None) -> Config:
             f"Invalid api_base_url '{api_base_url}'. Must be a valid URL starting with http:// or https://"
         )
 
-    allow_insecure_http = bool(data.get("allow_insecure_http", False))
+    allow_insecure_http_val = data.get("allow_insecure_http", False)
+    if not isinstance(allow_insecure_http_val, bool):
+        raise ConfigError(f"allow_insecure_http must be a boolean, got {type(allow_insecure_http_val).__name__}")
+    allow_insecure_http = bool(allow_insecure_http_val)
 
     if parsed_url.scheme == "http":
         hostname = (parsed_url.hostname or "").lower()

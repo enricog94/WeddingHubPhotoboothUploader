@@ -127,9 +127,9 @@ def test_cli_test_success(temp_dir: Path, capsys: pytest.CaptureFixture, monkeyp
                 "name": "Photobooth principale",
                 "enabled": True,
             },
-            "wedding": {
+            "event": {
                 "slug": "serena-enrico-2027",
-                "display_name": "Serena & Enrico",
+                "name": "Serena & Enrico",
             },
         }
 
@@ -145,8 +145,8 @@ def test_cli_test_success(temp_dir: Path, capsys: pytest.CaptureFixture, monkeyp
     assert "API.............. OK" in captured.out
     assert "Autenticazione... OK" in captured.out
     assert "Device........... Photobooth principale" in captured.out
-    assert "Matrimonio....... Serena & Enrico" in captured.out
-    assert "Wedding slug..... serena-enrico-2027" in captured.out
+    assert "Evento........... Serena & Enrico" in captured.out
+    assert "Event slug....... serena-enrico-2027" in captured.out
     assert "RESULT: OK" in captured.out
 
 
@@ -201,9 +201,9 @@ def test_cli_test_disabled_device(temp_dir: Path, capsys: pytest.CaptureFixture,
                 "name": "Photobooth Revoked",
                 "enabled": False,
             },
-            "wedding": {
+            "event": {
                 "slug": "serena-enrico-2027",
-                "display_name": "Serena & Enrico",
+                "name": "Serena & Enrico",
             },
         }
 

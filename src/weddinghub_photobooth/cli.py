@@ -127,19 +127,34 @@ def cmd_test(args: argparse.Namespace) -> int:
 
     try:
         data = client.verify_device()
-        device_info = data.get("device", {})
-        wedding_info = data.get("wedding", {})
-        device_name = device_info.get("name", "Photobooth")
-        wedding_slug = wedding_info.get("slug") or device_info.get("wedding_slug", "Unknown")
-        display_name = wedding_info.get("display_name") or wedding_slug
+        status = data.get("status")
+        device_info = data.get("device")
+        event_info = data.get("event")
+
+        if (
+            status != "ok"
+            or not isinstance(device_info, dict)
+            or not device_info.get("name")
+            or not isinstance(event_info, dict)
+            or not event_info.get("slug")
+        ):
+            print("API.............. OK")
+            print("Autenticazione... FAIL")
+            print("\nRESULT: FAIL")
+            print("Reason: Invalid verify response payload.", file=sys.stderr)
+            return 1
+
+        device_name = device_info.get("name")
+        event_slug = event_info.get("slug")
+        display_name = event_info.get("name") or event_slug
         enabled = device_info.get("enabled", True)
 
         if not enabled:
             print("API.............. OK")
             print("Autenticazione... FAIL")
             print(f"Device........... {device_name}")
-            print(f"Matrimonio....... {display_name}")
-            print(f"Wedding slug..... {wedding_slug}")
+            print(f"Evento........... {display_name}")
+            print(f"Event slug....... {event_slug}")
             print("\nRESULT: FAIL")
             print("Reason: Device is registered but currently disabled in backend.", file=sys.stderr)
             return 1
@@ -147,8 +162,8 @@ def cmd_test(args: argparse.Namespace) -> int:
         print("API.............. OK")
         print("Autenticazione... OK")
         print(f"Device........... {device_name}")
-        print(f"Matrimonio....... {display_name}")
-        print(f"Wedding slug..... {wedding_slug}")
+        print(f"Evento........... {display_name}")
+        print(f"Event slug....... {event_slug}")
         print("\nRESULT: OK")
         return 0
     except AuthenticationError as e:

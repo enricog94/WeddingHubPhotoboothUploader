@@ -41,8 +41,28 @@ def parse_retry_after(header_value: str | None) -> float | None:
         val = float(header_value)
         return max(0.0, val)
     except ValueError:
-        # If it's an HTTP-date format, return None and let caller use exponential backoff
-        return None
+        from datetime import UTC, datetime
+        from email.utils import parsedate_to_datetime
+
+        try:
+            dt = parsedate_to_datetime(header_value)
+            now = datetime.now(UTC)
+            diff = (dt - now).total_seconds()
+            return max(0.0, diff)
+        except (TypeError, ValueError):
+            return None
+
+
+def normalize_verify_response(data: dict[str, Any]) -> dict[str, Any]:
+    """Normalize legacy 'wedding' payloads to Event-first 'event' payload."""
+    if "wedding" in data and "event" not in data:
+        w = data["wedding"]
+        data["event"] = {
+            "slug": w.get("slug", ""),
+            "name": w.get("display_name", ""),
+            "event_type": "wedding",
+        }
+    return data
 
 
 class WeddingHubApiClient:
@@ -240,7 +260,7 @@ class WeddingHubApiClient:
             resp = self._client.get(url, headers=self._auth_headers())
             self._handle_response_status(resp, "verify_device")
             data = resp.json()
-            return data
+            return normalize_verify_response(data)
         except (httpx.TimeoutException, httpx.NetworkError) as e:
             raise TransientApiError(
                 f"Connection error to WeddingHub API at {self.api_base_url}: {e}"

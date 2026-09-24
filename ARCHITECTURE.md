@@ -50,8 +50,9 @@ The daemon runs on a photobooth computer (Raspberry Pi, Linux mini PC, or Window
 ### 2.1. `PhotoWatcher`
 - Combines real-time inotify filesystem events (`watchdog`) with periodic directory polling fallback.
 - Guarantees detection even if camera software moves files atomically, writes them slowly, or creates temporary locks.
+- **Bounded Stability Threads**: Replaces unbounded ad-hoc threads with a `ThreadPoolExecutor` (max 4 workers) to prevent resource runaway during mass discovery.
 - **Stability Verification**:
-  - Samples file size and `mtime` across a configurable delay (`stability_delay`).
+  - Samples file size and `mtime` across a configurable delay (`stability_delay`). Pre-filters known files securely using persistent path/size/mtime observations stored in `file_observations`.
   - Verifies minimum JPEG structural markers: Starts with SOI (`0xFFD8`) and ends with EOI (`0xFFD9`).
   - Computes cryptographic SHA-256 hash.
   - Enqueues into SQLite queue with state `PENDING`.
@@ -59,6 +60,7 @@ The daemon runs on a photobooth computer (Raspberry Pi, Linux mini PC, or Window
 ### 2.2. `Database` (SQLite Persistence)
 - Configured with `journal_mode=WAL` (Write-Ahead Logging), `synchronous=NORMAL`, and `busy_timeout=5000`.
 - Supports concurrent access from multiple threads via a thread-safe mutex and connection isolation.
+- Manages `file_observations` to fast-path skip previously verified matching `(path, size, mtime_ns)` candidates.
 - Strictly deduplicates items on SHA-256 (`UNIQUE` constraint).
 - Tracks attempt counts, error strings, retry scheduling, and remote media IDs.
 

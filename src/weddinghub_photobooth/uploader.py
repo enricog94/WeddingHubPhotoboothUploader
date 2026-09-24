@@ -15,6 +15,7 @@ from .api import (
 )
 from .config import Config
 from .db import Database
+from .hashing import calculate_sha256
 from .logging_config import (
     EVENT_AUTH_ERROR,
     EVENT_UPLOAD_COMPLETED,
@@ -124,6 +125,25 @@ class UploadWorker:
             EVENT_UPLOAD_STARTED,
             f"Starting upload for photo #{item.id}: {item.filename} (sha256:{short_sha})",
         )
+
+        try:
+            current_stat = local_path.stat()
+            if current_stat.st_size != item.file_size:
+                raise ValueError("size changed")
+            current_sha = calculate_sha256(local_path)
+            if current_sha != item.sha256:
+                raise ValueError("content changed")
+        except (OSError, ValueError):
+            err_msg = "LOCAL_FILE_CHANGED"
+            self.db.delete_observation(str(local_path))
+            self.db.mark_failed(item.id, err_msg)
+            log_event(
+                logger,
+                logging.ERROR,
+                EVENT_UPLOAD_FAILED,
+                f"Photo #{item.id} changed after enqueue. Marked FAILED: {err_msg}",
+            )
+            return
 
         try:
             # Step 1: Init upload

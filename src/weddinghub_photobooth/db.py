@@ -71,6 +71,50 @@ class Database:
                 ON upload_queue (sha256);
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS file_observations (
+                    local_path TEXT PRIMARY KEY,
+                    observed_size INTEGER NOT NULL,
+                    observed_mtime_ns INTEGER NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    last_seen_at TEXT NOT NULL
+                );
+                """
+            )
+            conn.commit()
+
+    def is_known_unchanged(self, local_path: str, size: int, mtime_ns: int) -> bool:
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT 1 FROM file_observations WHERE local_path = ? AND observed_size = ? AND observed_mtime_ns = ?",
+                (local_path, size, mtime_ns),
+            )
+            return cursor.fetchone() is not None
+
+    def update_observation(self, local_path: str, size: int, mtime_ns: int, sha256: str) -> None:
+        last_seen = utc_now_iso()
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO file_observations (local_path, observed_size, observed_mtime_ns, sha256, last_seen_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(local_path) DO UPDATE SET
+                    observed_size=excluded.observed_size,
+                    observed_mtime_ns=excluded.observed_mtime_ns,
+                    sha256=excluded.sha256,
+                    last_seen_at=excluded.last_seen_at
+                """,
+                (local_path, size, mtime_ns, sha256, last_seen),
+            )
+            conn.commit()
+
+    def delete_observation(self, local_path: str) -> None:
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM file_observations WHERE local_path = ?", (local_path,))
             conn.commit()
 
     def enqueue(

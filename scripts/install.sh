@@ -48,7 +48,29 @@ else
     echo "[OK] Existing configuration file found at $CONFIG_FILE."
 fi
 
-# 4. Install Python package in dedicated virtual environment (PEP 668 compliant)
+# 4. Pre-flight checks
+echo "[INFO] Running Python pre-flight checks..."
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "[ERROR] python3 is not installed. Please install Python 3.11+." >&2
+    exit 1
+fi
+
+PY_VERSION=$(python3 -c 'import sys; print("%02d%02d" % (sys.version_info.major, sys.version_info.minor))')
+if [ "$PY_VERSION" -lt 311 ]; then
+    echo "[ERROR] Python version must be >= 3.11." >&2
+    exit 1
+fi
+
+VENV_TEST_DIR=$(mktemp -d)
+if ! python3 -m venv "$VENV_TEST_DIR" >/dev/null 2>&1; then
+    echo "[ERROR] Failed to create a test virtual environment." >&2
+    echo "Please ensure python3-venv is correctly installed, e.g.: sudo apt install python3-venv" >&2
+    rm -rf "$VENV_TEST_DIR"
+    exit 1
+fi
+rm -rf "$VENV_TEST_DIR"
+
+# 5. Install Python package in dedicated virtual environment (PEP 668 compliant)
 APP_DIR="/opt/weddinghub-photobooth"
 VENV_DIR="$APP_DIR/venv"
 

@@ -8,7 +8,11 @@ The project follows Semantic Versioning and a Keep-a-Changelog-style structure.
 
 ### Added
 
-- **`weddinghub-photobooth test` CLI command**: Validates connectivity and verifies device credentials against WeddingHub, displaying device metadata and wedding association.
+- **Persistent Scanner Fast-Path**: Implemented a `file_observations` SQLite table to securely skip unmodified files across scanner restarts without incurring hashing/thread penalties.
+- **Pre-upload Integrity Validation**: Enforced strict pre-upload validations in `UploadWorker`; detecting any file mutation (size or SHA-256) since enqueueing now aborts the upload and forces file rediscovery.
+- **Installer Preflight Integrity**: Added strict python/venv validations to installation script (`scripts/install.sh`) to prevent corrupt system environments.
+- **HTTP-Date Retry Support**: Enhanced `Retry-After` parsing to elegantly support both delta seconds and RFC 7231 HTTP dates.
+- **`weddinghub-photobooth test` CLI command**: Validates connectivity and verifies device credentials against WeddingHub, displaying device metadata and event association.
 - **Device Verification API**: Implemented `verify_device()` in `WeddingHubApiClient` (`GET /api/photobooth/verify`).
 - **Batch / Step Processing**: Added `process_queue_once()` to `UploadWorker` for deterministic queue processing in tests and CLI scripts.
 - **Reference Test Server (`WeddingHubReferenceServer`)**: Dedicated Python test harness (`tests/support/weddinghub_reference_server.py`) replicating PostgreSQL/Supabase and R2 storage behavior for automated integration and contract testing.
@@ -20,6 +24,9 @@ The project follows Semantic Versioning and a Keep-a-Changelog-style structure.
 
 ### Changed
 
+- **Bounded Stability Threads**: Shifted unmanaged thread-per-file concurrency in `PhotoWatcher` to a `ThreadPoolExecutor` (max 4 workers) to eliminate unbounded connection spikes.
+- **Event-First Contract Normalization**: Updated device verification and CLI to rigorously validate API payloads under the new generic EventHub structure (`event` replacing `wedding`).
+- **Type-Safe Configuration**: Placed robust boolean type requirements on sensitive config fields like `allow_insecure_http` to catch accidental string casting.
 - **CLI / Systemd Syntax**: Standardized CLI invocation to canonical `weddinghub-photobooth -c /etc/weddinghub-photobooth/config.toml <command>`, using parent argument parsing to seamlessly support `-c` before or after subcommands.
 - **Presigned R2 403 Retry**: HTTP 403 on storage presigned PUT is treated as a transient/retriable expiration error (`TransientApiError`), triggering a fresh `/init` session rather than a permanent failure.
 - **Session Expiry 410 Recovery**: HTTP 410 Gone on `/complete` is classified as retriable (`TransientApiError`), allowing the client to transition the item to `RETRY` and re-initiate the upload with a new session.

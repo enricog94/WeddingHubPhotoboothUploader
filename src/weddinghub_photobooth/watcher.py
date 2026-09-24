@@ -2,8 +2,8 @@
 
 import logging
 import threading
-import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -61,6 +61,7 @@ class PhotoWatcher:
         self._stop_event = threading.Event()
         self._active_checks: set[Path] = set()
         self._active_checks_lock = threading.Lock()
+        self._executor: ThreadPoolExecutor | None = None
         self._observer: Observer | None = None
         self._scan_thread: threading.Thread | None = None
 
@@ -68,6 +69,7 @@ class PhotoWatcher:
         """Start both real-time inotify observer and periodic fallback scanner."""
         self.watch_directory.mkdir(parents=True, exist_ok=True)
         self._stop_event.clear()
+        self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="PhotoWatcherWorker")
 
         # Run initial scan first to discover any existing files
         self.scan_directory()
@@ -89,6 +91,9 @@ class PhotoWatcher:
     def stop(self) -> None:
         """Stop watcher and scanner threads."""
         self._stop_event.set()
+        if self._executor:
+            self._executor.shutdown(wait=True, cancel_futures=True)
+            self._executor = None
         if self._observer:
             try:
                 self._observer.stop()
@@ -101,18 +106,24 @@ class PhotoWatcher:
     def handle_photo_candidate(self, path: Path) -> None:
         """Trigger stability verification in a background thread."""
         resolved = path.resolve()
+
+        try:
+            stat = resolved.stat()
+            if self.db.is_known_unchanged(str(resolved), stat.st_size, stat.st_mtime_ns):
+                return
+        except OSError:
+            return
+
         with self._active_checks_lock:
             if resolved in self._active_checks:
                 return
             self._active_checks.add(resolved)
 
-        thread = threading.Thread(
-            target=self._verify_and_enqueue,
-            args=(resolved,),
-            name=f"StabilityCheck-{resolved.name}",
-            daemon=True,
-        )
-        thread.start()
+        if self._executor and not self._stop_event.is_set():
+            try:
+                self._executor.submit(self._verify_and_enqueue, resolved)
+            except RuntimeError:
+                pass
 
     def _verify_and_enqueue(self, path: Path) -> None:
         """Verify file stability, inspect JPEG structure, hash, and persist in SQLite."""
@@ -146,6 +157,9 @@ class PhotoWatcher:
                 logger.debug(
                     f"Photo already queued (id #{item.id}, status {item.status.value}): {path.name} (sha256:{short_sha})"
                 )
+
+            # Save observation to skip future unneeded scans
+            self.db.update_observation(str(path), file_size, stat.st_mtime_ns, sha256)
         except Exception:
             logger.exception(f"Error validating/enqueueing {path.name}")
         finally:
@@ -177,10 +191,12 @@ class PhotoWatcher:
 
                 # If file is empty, it is definitely still being written or initialized
                 if initial_size == 0:
-                    time.sleep(self.stability_delay)
+                    if self._stop_event.wait(self.stability_delay):
+                        return False
                     continue
 
-                time.sleep(self.stability_delay)
+                if self._stop_event.wait(self.stability_delay):
+                    return False
 
                 if not path.exists():
                     return False
