@@ -1,5 +1,12 @@
 # WeddingHub Photobooth Backend Integration Specification
 
+> [!IMPORTANT]
+> **Legacy WeddingHub contract.** This document records the previous Wedding-specific
+> integration using `wedding_id` and a `wedding` verify payload. It is retained for
+> history only. For all new EventHub work, the authoritative contract is
+> [`docs/EVENTHUB_INTEGRATION.md`](docs/EVENTHUB_INTEGRATION.md). Do not port this schema
+> unchanged into EventHub.
+
 This document defines the formal API contract, PostgreSQL database schema, security model, and integration guidelines between the **WeddingHub Photobooth Uploader** client and the **WeddingHub Cloudflare Workers + Supabase PostgreSQL + Hyperdrive + Cloudflare R2** backend.
 
 ---
